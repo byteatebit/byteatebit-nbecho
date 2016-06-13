@@ -1,0 +1,132 @@
+buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+
+    dependencies {
+        classpath 'com.netflix.nebula:gradle-ospackage-plugin:3.6.1'
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'maven'
+apply plugin: 'signing'
+apply plugin: 'nebula.ospackage'
+
+import org.apache.tools.ant.filters.ReplaceTokens
+
+group = 'com.byteatebit'
+version = '0.1.0'
+
+description = """byteatebit-nbecho"""
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+repositories {
+    mavenLocal()
+    maven { url privateRepositoryUrl }
+    mavenCentral()
+}
+
+dependencies {
+    compile group: 'com.byteatebit', name: 'byteatebit-nbserver', version:'0.1.0'
+    compile group: 'commons-cli', name: 'commons-cli', version:'1.3'
+    testCompile group: 'junit', name: 'junit', version:'4.11'
+    testCompile group: 'org.mockito', name: 'mockito-core', version:'2.0.53-beta'
+}
+
+configurations {
+    priv
+}
+
+task srcJar(type: Jar) {
+    classifier = "src"
+    from sourceSets.main.allSource
+}
+
+task copyLibs(type: Copy) {
+    into "${buildDir}/${project.name}/lib"
+    from configurations.runtime
+}
+
+task copyJar(type: Copy) {
+    dependsOn jar
+    into "${buildDir}/${project.name}"
+    from("${buildDir}/libs") {
+        include(jar.archiveName)
+    }
+}
+
+task copyDebEtc(type: Copy) {
+    into "${buildDir}/${project.name}/etc"
+    from("${projectDir}/src/deb/etc") {
+        include('*')
+    }
+}
+
+task copyDebScripts(type: Copy) {
+    into "${buildDir}/${project.name}/scripts"
+    from("${projectDir}/src/deb/scripts") {
+        include('*')
+        fileMode 0755
+    }
+    filter(ReplaceTokens, tokens: [jarArchiveName: jar.archiveName])
+}
+
+task copyDebInstallScripts(type: Copy) {
+    into "${buildDir}/${project.name}/install"
+    from("${projectDir}/src/deb/install") {
+        include('*')
+        fileMode 0755
+    }
+}
+
+task createDeployment(dependsOn: ['copyJar', 'copyLibs', 'copyDebEtc', 'copyDebScripts', 'copyDebInstallScripts'])
+
+task createDebianPackage(type: Deb) {
+    dependsOn createDeployment
+    release = 1
+
+    into "/opt/${project.name}"
+
+    from ("${buildDir}/${project.name}") {
+        include('*.jar')
+    }
+
+    from ("${buildDir}/${project.name}/lib") {
+        into 'lib'
+    }
+
+    from ("${buildDir}/${project.name}/etc") {
+        into 'etc'
+    }
+
+    from ("${buildDir}/${project.name}/scripts") {
+        into 'scripts'
+    }
+}
+
+task copyDockerfile(type: Copy) {
+    dependsOn createDebianPackage
+    into "${buildDir}/distributions"
+    from("${projectDir}/docker")
+    filter(ReplaceTokens, tokens: [packageName: project.name, packageVersion: version])
+}
+
+
+jar {
+    manifest {
+        attributes("Class-Path": configurations.runtime.collect { 'lib/' + it.getName() }.join(' '))
+    }
+}
+
+assemble {
+    dependsOn createDebianPackage, copyDockerfile
+}
+
+
+
+

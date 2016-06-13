@@ -1,0 +1,17 @@
+#
+# Oracle Java 8 Dockerfile
+#
+# https://github.com/dockerfile/java
+# https://github.com/dockerfile/java/tree/master/oracle-java8
+#
+
+# Pull base image.
+FROM java:openjdk-8-jdk
+
+ENV PATH "${PATH}:${JAVA_HOME}/bin"
+
+COPY @packageName@_@packageVersion@-1_all.deb /tmp/stage/
+RUN dpkg -i /tmp/stage/@packageName@_@packageVersion@-1_all.deb
+
+# Define default command.
+CMD ["/opt/byteatebit-nbecho/scripts/echo-server.sh"]
